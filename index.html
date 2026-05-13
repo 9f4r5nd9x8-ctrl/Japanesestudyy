@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>五十音藍色學習助手</title>
+    <style>
+        /* 藍色系配色方案 */
+        :root { --primary: #0984e3; --bg: #e1f5fe; --success: #00b894; --text: #2d3436; --card-bg: #ffffff; }
+        
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; overflow-x: hidden; touch-action: manipulation; color: var(--text); }
+        
+        /* 頁眉與進度 */
+        .header { width: 100%; max-width: 400px; text-align: center; margin-bottom: 10px; background: white; padding: 15px; border-radius: 20px; box-shadow: 0 4px 15px rgba(9, 132, 227, 0.1); box-sizing: border-box; border: 1px solid #b3e5fc; }
+        .progress-text { font-size: 14px; color: #636e72; font-weight: bold; margin-top: 5px; }
+
+        /* 導航按鈕 */
+        .nav { display: flex; gap: 8px; width: 100%; max-width: 400px; margin-bottom: 15px; }
+        .nav button { flex: 1; padding: 12px 5px; border: none; background: #b3e5fc; border-radius: 12px; font-size: 14px; font-weight: bold; transition: 0.3s; color: #01579b; }
+        .nav button.active { background: var(--primary); color: white; box-shadow: 0 4px 10px rgba(9, 132, 227, 0.3); }
+
+        .section { display: none; width: 100%; max-width: 350px; flex-direction: column; align-items: center; }
+        .section.active { display: flex; }
+
+        /* 閃卡樣式 */
+        .card-wrapper { width: 280px; height: 380px; position: relative; }
+        .card { width: 100%; height: 100%; background: white; border-radius: 30px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 15px 35px rgba(0,0,0,0.1); transition: transform 0.3s ease-out; position: absolute; border: 2px solid #e1f5fe; }
+        .kana-big { font-size: 120px; margin: 0; color: var(--primary); pointer-events: none; }
+        .romaji-hint { font-size: 40px; color: #00b894; margin-top: 10px; opacity: 0; transition: 0.2s; font-weight: bold; }
+        .romaji-hint.show { opacity: 1; }
+
+        /* 手寫區域 */
+        canvas { background: white; border: 3px solid var(--primary); border-radius: 25px; touch-action: none; margin-top: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .canvas-controls { margin-top: 15px; display: flex; gap: 10px; }
+        .write-ans { font-size: 80px; color: var(--success); margin-top: 10px; display: none; font-weight: bold; }
+
+        /* 匹配測試 - 兩列式藍色風格 */
+        .match-container { display: flex; gap: 20px; width: 100%; margin-top: 10px; }
+        .match-column { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+        .match-btn { padding: 18px 10px; background: white; border-radius: 15px; border: 2px solid #e1f5fe; text-align: center; font-size: 22px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: 0.2s; min-height: 30px; color: #01579b; }
+        .match-btn.selected { border-color: var(--primary); background: #e1f5fe; transform: scale(1.05); }
+
+        /* 成功小卡彈窗 */
+        #success-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(1, 87, 155, 0.8); z-index: 9999; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 40px; border-radius: 30px; text-align: center; width: 220px; animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); border: 4px solid var(--primary); }
+        @keyframes pop { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .main-btn { background: var(--primary); color: white; border: none; padding: 15px 30px; border-radius: 50px; margin-top: 20px; font-weight: bold; width: 100%; font-size: 16px; box-shadow: 0 4px 10px rgba(9, 132, 227, 0.3); }
+        button:active { opacity: 0.7; transform: scale(0.95); }
+        .control-btn { padding: 10px 15px; border-radius: 10px; border: 1px solid #0984e3; background: white; color: #0984e3; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h3 id="group-label" style="margin: 0; color: var(--primary);">第 1 關：あ・か 行</h3>
+        <div class="progress-text">解鎖進度：<span id="unlock-count">0</span> / 50 假名</div>
+    </div>
+
+    <div class="nav">
+        <button onclick="showSection('flashcard')" id="nav-flashcard" class="active">閃卡練習</button>
+        <button onclick="showSection('writing')" id="nav-writing">手寫練習</button>
+        <button onclick="showSection('matching')" id="nav-matching">挑戰解鎖</button>
+    </div>
+
+    <!-- 閃卡區 -->
+    <div id="flashcard" class="section active">
+        <div class="card-wrapper">
+            <div class="card" id="fc-card">
+                <p class="kana-big" id="fc-kana">あ</p>
+                <p class="romaji-hint" id="fc-romaji">a</p>
+            </div>
+        </div>
+        <p style="color: #01579b; font-size: 14px; margin-top: 20px; font-weight: 500;">👉 右滑切換下一張 | 點擊卡片聽讀音</p>
+    </div>
+
+    <!-- 手寫區 -->
+    <div id="writing" class="section">
+        <p style="margin: 5px;">請默寫：<b id="write-target" style="font-size:28px; color:var(--primary);">a</b></p>
+        <canvas id="canvas" width="300" height="300"></canvas>
+        <div class="canvas-controls">
+            <button class="control-btn" onclick="clearCanvas()">清除</button>
+            <button class="control-btn" style="background:var(--primary); color:white;" onclick="showWriteAnswer()">看答案</button>
+            <button class="control-btn" style="background:var(--success); color:white; border-color:var(--success);" onclick="nextWrite()">下一題</button>
+        </div>
+        <div id="write-answer-text" class="write-ans">あ</div>
+    </div>
+
+    <!-- 匹配測試區 -->
+    <div id="matching" class="section">
+        <div class="match-container">
+            <div class="match-column" id="col-k"></div>
+            <div class="match-column" id="col-r"></div>
+        </div>
+        <button class="main-btn" onclick="initMatching()">重新排列本關測試</button>
+    </div>
+
+    <!-- 成功彈窗 -->
+    <div id="success-modal">
+        <div class="modal-content">
+            <div id="modal-kana" style="font-size:90px; font-weight:bold; color:var(--primary);"></div>
+            <div id="modal-romaji" style="font-size:35px; color:#636e72; margin:10px 0; font-weight: bold;"></div>
+            <div id="modal-word" style="font-size:18px; color:var(--success); font-weight:bold; background: #e8f8f5; padding: 10px; border-radius: 10px;"></div>
+        </div>
+    </div>
+
+<script>
+    const allGroups = [
+        [{k:'あ',r:'a'},{k:'い',r:'i'},{k:'う',r:'u'},{k:'え',r:'e'},{k:'お',r:'o'},{k:'か',r:'ka'},{k:'き',r:'ki'},{k:'く',r:'ku'},{k:'け',r:'ke'},{k:'こ',r:'ko'}],
+        [{k:'さ',r:'sa'},{k:'し',r:'shi'},{k:'す',r:'su'},{k:'せ',r:'se'},{k:'そ',r:'so'},{k:'た',r:'ta'},{k:'ち',r:'chi'},{k:'つ',r:'tsu'},{k:'て',r:'te'},{k:'と',r:'to'}],
+        [{k:'な',r:'na'},{k:'に',r:'ni'},{k:'ぬ',r:'nu'},{k:'ね',r:'ne'},{k:'の',r:'no'},{k:'は',r:'ha'},{k:'ひ',r:'hi'},{k:'ふ',r:'fu'},{k:'へ',r:'he'},{k:'ほ',r:'ho'}],
+        [{k:'ま',r:'ma'},{k:'み',r:'mi'},{k:'む',r:'mu'},{k:'め',r:'me'},{k:'も',r:'mo'},{k:'や',r:'ya'},{k:'ゆ',r:'yu'},{k:'よ',r:'yo'},{k:'ら',r:'ra'},{k:'り',r:'ri'}],
+        [{k:'る',r:'ru'},{k:'れ',r:'re'},{k:'ろ',r:'ro'},{k:'わ',r:'wa'},{k:'を',r:'wo'},{k:'ん',r:'n'},{k:'が',r:'ga'},{k:'ぎ',r:'gi'},{k:'ぐ',r:'gu'},{k:'げ',r:'ge'}]
+    ];
+
+    const vocabulary = {
+        'あ': 'あひる (鴨子)', 'い': 'いす (椅子)', 'う': 'うみ (大海)', 'え': 'えんぴつ (鉛筆)', 'お': 'おかし (點心)',
+        'か': 'かさ (傘)', 'き': 'きもの (和服)', 'く': 'くるま (汽車)', 'け': 'けいたい (手機)', 'こ': 'こども (小孩)',
+        'さ': 'さかな (魚)', 'し': 'しんぶん (新聞)', 'す': 'すいか (西瓜)', 'せ': 'せっけん (肥皂)', 'そ': 'そら (天空)'
+    };
+
+    const groupNames = ["あ・か 行", "さ・た 行", "な・は 行", "ま・や・ら 行", "ら・わ・ん・濁音"];
+    let groupIndex = 0; 
+    let currentData = allGroups[groupIndex];
+    let cardIndex = 0;
+    let selection = { k: null, r: null };
+
+    // --- 核心修改：極慢語速控制 ---
+    function playSound(text, isSlowMode = false) {
+        window.speechSynthesis.cancel();
+        const uttr = new SpeechSynthesisUtterance(text);
+        uttr.lang = 'ja-JP';
+        // 如果是匹配成功或點擊聽音，使用 0.5 倍速（非常慢），否則 0.6 倍速
+        uttr.rate = isSlowMode ? 0.5 : 0.6; 
+        uttr.pitch = 1.0;
+        window.speechSynthesis.speak(uttr);
+    }
+
+    function showSection(id) {
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        document.getElementById('nav-' + id).classList.add('active');
+        if(id === 'matching') initMatching();
+        if(id === 'writing') nextWrite();
+    }
+
+    // 閃卡邏輯
+    const card = document.getElementById('fc-card');
+    let startX = 0;
+    card.addEventListener('touchstart', (e) => { startX = e.touches[0].clientX; card.style.transition = 'none'; });
+    card.addEventListener('touchmove', (e) => {
+        let moveX = e.touches[0].clientX - startX;
+        if (moveX > 0) card.style.transform = `translateX(${moveX}px) rotate(${moveX/15}deg)`;
+    });
+    card.addEventListener('touchend', (e) => {
+        let diff = e.changedTouches[0].clientX - startX;
+        if (diff > 100) {
+            card.style.transition = 'transform 0.4s ease-out';
+            card.style.transform = 'translateX(600px)';
+            setTimeout(() => { 
+                cardIndex = Math.floor(Math.random() * currentData.length);
+                updateFlashCard();
+                card.style.transition = 'none'; card.style.transform = 'translateX(0)'; 
+            }, 300);
+        } else {
+            card.style.transition = 'transform 0.2s';
+            card.style.transform = 'translateX(0)';
+            if (Math.abs(diff) < 10) {
+                playSound(currentData[cardIndex].k, true);
+                document.getElementById('fc-romaji').classList.add('show');
+            }
+        }
+    });
+
+    function updateFlashCard() {
+        document.getElementById('fc-kana').innerText = currentData[cardIndex].k;
+        document.getElementById('fc-romaji').innerText = currentData[cardIndex].r;
+        document.getElementById('fc-romaji').classList.remove('show');
+    }
+
+    // 手寫邏輯
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let drawing = false;
+    canvas.addEventListener('touchstart', (e) => { drawing = true; draw(e); });
+    canvas.addEventListener('touchmove', draw);
+    canvas.addEventListener('touchend', () => { drawing = false; ctx.beginPath(); });
+    function draw(e) {
+        if (!drawing) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.touches[0].clientX - rect.left;
+        const y = e.touches[0].clientY - rect.top;
+        ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.strokeStyle = '#01579b';
+        ctx.lineTo(x, y); ctx.stroke();
+    }
+    function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+    function showWriteAnswer() {
+        document.getElementById('write-answer-text').innerText = currentData[cardIndex].k;
+        document.getElementById('write-answer-text').style.display = 'block';
+        playSound(currentData[cardIndex].k, true);
+    }
+    function nextWrite() {
+        cardIndex = Math.floor(Math.random() * currentData.length);
+        document.getElementById('write-target').innerText = currentData[cardIndex].r;
+        document.getElementById('write-answer-text').style.display = 'none';
+        clearCanvas();
+    }
+
+    // 匹配挑戰邏輯
+    function initMatching() {
+        const colK = document.getElementById('col-k');
+        const colR = document.getElementById('col-r');
+        colK.innerHTML = ''; colR.innerHTML = '';
+        selection = { k: null, r: null };
+        let pool = [...currentData].sort(() => 0.5 - Math.random()).slice(0, 5);
+        let kanas = pool.map(i => ({t: i.k, id: i.r, type: 'k'})).sort(() => 0.5 - Math.random());
+        let romajis = pool.map(i => ({t: i.r, id: i.r, type: 'r'})).sort(() => 0.5 - Math.random());
+        kanas.forEach(item => colK.appendChild(createMatchBtn(item)));
+        romajis.forEach(item => colR.appendChild(createMatchBtn(item)));
+    }
+
+    function createMatchBtn(item) {
+        let b = document.createElement('div');
+        b.className = 'match-btn';
+        b.innerText = item.t;
+        b.onclick = () => {
+            playSound(item.type === 'k' ? item.t : item.id, true);
+            if (item.type === 'k') selection.k = {item, el: b};
+            else selection.r = {item, el: b};
+            document.querySelectorAll('.match-btn').forEach(btn => btn.classList.remove('selected'));
+            if(selection.k) selection.k.el.classList.add('selected');
+            if(selection.r) selection.r.el.classList.add('selected');
+            if (selection.k && selection.r) {
+                if (selection.k.item.id === selection.r.item.id) {
+                    showSuccessModal(selection.k.item.t, selection.k.item.id);
+                    selection.k.el.style.visibility = 'hidden';
+                    selection.r.el.style.visibility = 'hidden';
+                    if (document.querySelectorAll('.match-btn[style*="hidden"]').length === 10) setTimeout(levelUp, 1800);
+                }
+                selection = { k: null, r: null };
+            }
+        };
+        return b;
+    }
+
+    function showSuccessModal(kana, romaji) {
+        const modal = document.getElementById('success-modal');
+        document.getElementById('modal-kana').innerText = kana;
+        document.getElementById('modal-romaji').innerText = romaji;
+        document.getElementById('modal-word').innerText = vocabulary[kana] || "太棒了！繼續努力！";
+        modal.style.display = 'flex';
+        playSound(kana, true);
+        setTimeout(() => { modal.style.display = 'none'; }, 1500);
+    }
+
+    function levelUp() {
+        if (groupIndex < allGroups.length - 1) {
+            alert("💙 成功解鎖下一關！");
+            groupIndex++;
+            currentData = allGroups[groupIndex];
+            document.getElementById('group-label').innerText = `第 ${groupIndex+1} 關：${groupNames[groupIndex]}`;
+            document.getElementById('unlock-count').innerText = groupIndex * 10;
+            showSection('flashcard');
+        } else {
+            alert("👑 恭喜你！已完成所有清音關卡挑戰！");
+        }
+    }
+
+    updateFlashCard();
+</script>
+</body>
+</html>
